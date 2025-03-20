@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GuardianEye - Real Time Threat Detection for Women</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        h1 { color: #333; }
+        
+        /* Main container for video, audio, map, and police station info */
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        /* Section for video, audio, map, and police stations */
+        .section {
+            width: 45%;
+            min-width: 350px;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        /* Counter for male/female detection */
+        .counter {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        /* Alert message */
+        .alert-box {
+            font-size: 18px;
+            font-weight: bold;
+            color: red;
+            margin-top: 10px;
+        }
+
+        /* Emergency Button */
+        .emergency-button {
+            margin-top: 10px;
+            padding: 12px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            border: none;
+            background-color: red;
+            color: white;
+            border-radius: 5px;
+        }
+        .emergency-button:hover {
+            background-color: darkred;
+        }
+
+        /* Buttons */
+        button {
+            margin-top: 10px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Map section */
+        .map-container {
+            width: 45%;
+            min-width: 350px;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        /* Map styling */
+        #map {
+            width: 100%;
+            height: 250px;
+            border-radius: 8px;
+        }
+
+        /* Police Stations Section */
+        .police-container {
+            width: 90%;
+            margin-top: 20px;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .police-stations {
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 900px) {
+            .container {
+                flex-direction: column;
+                align-items: center;
+            }
+            .section, .map-container, .police-container {
+                width: 90%;
+            }
+        }
+    </style>
+
+    <!-- Load OpenStreetMap via Leaflet.js -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+
+</head>
+<body>
+    <h1>GuardianEye - Real Time Threat Detection for Women</h1>
+
+    <div class="container">
+        <!-- Video Detection Section -->
+        <div class="section">
+            <h2>🎥 Live Gender Detection</h2>
+            <img src="{{ url_for('video_feed') }}" width="100%">
+            <div class="counter">
+                <p>👨 Males in Frame: <span id="male_count">0</span></p>
+                <p>👩 Females in Frame: <span id="female_count">0</span></p>
+            </div>
+        </div>
+
+        <!-- Audio Detection Section -->
+        <div class="section">
+            <h2>🎤 Live Speech Recognition</h2>
+            <p><strong>Detected Speech:</strong> <span id="transcript">Waiting for input...</span></p>
+            <p class="alert-box" id="alertMessage"></p>
+            <button onclick="startListening()">🔴 Start Listening</button>
+            <br><br>
+            <button class="emergency-button" onclick="triggerEmergency()">🚨 EMERGENCY</button>
+        </div>
+
+        <!-- Map Section -->
+        <div class="map-container">
+            <h3>📍 Video Location</h3>
+            <div id="map"></div>
+            <p><strong>Latitude:</strong> <span id="latitude">Detecting...</span></p>
+            <p><strong>Longitude:</strong> <span id="longitude">Detecting...</span></p>
+        </div>
+    </div>
+
+    <!-- Nearby Police Stations -->
+    <div class="police-container">
+        <h2>🚔 Nearby Police Stations</h2>
+        <div class="police-stations" id="policeStations">
+            <p>Finding nearby police stations...</p>
+        </div>
+    </div>
+
+    <script>
+        function updateCounts() {
+    fetch('/get_counts')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById("male_count").innerText = data.males;
+            document.getElementById("female_count").innerText = data.females;
+            
+            // Update alert message
+            if (data.danger_alert === true) {
+                document.getElementById("alertMessage").innerText = "🚨 ALERT: Possible danger detected!";
+            } else if (data.danger_alert === "Waiting for female voice...") {
+                document.getElementById("alertMessage").innerText = "⚠️ Waiting for female voice...";
+            } else {
+                document.getElementById("alertMessage").innerText = "";
+            }
+        });
+}
+
+
+        function updateSpeechStatus() {
+            fetch('/get_speech_status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("transcript").innerText = data.transcript;
+                    document.getElementById("alertMessage").innerText = data.alert ? "🚨 ALERT: Possible danger detected!" : "";
+                });
+        }
+
+        function startListening() {
+            fetch('/detect_speech')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("transcript").innerText = data.transcript;
+                    document.getElementById("alertMessage").innerText = data.alert ? "🚨 ALERT: Possible danger detected!" : "";
+                });
+        }
+
+        function triggerEmergency() {
+            alert("🚨 Emergency Alert Triggered!");
+            fetch('/trigger_emergency', { method: 'POST' });
+        }
+
+        function initMap(latitude, longitude) {
+            var map = L.map('map').setView([latitude, longitude], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            L.marker([latitude, longitude]).addTo(map).bindPopup("📍 Video Location").openPopup();
+        }
+
+        function getNearbyPoliceStations(latitude, longitude) {
+            const overpassQuery = `
+                [out:json];
+                (
+                    node["amenity"="police"](around:5000, ${latitude}, ${longitude});
+                    way["amenity"="police"](around:5000, ${latitude}, ${longitude});
+                    relation["amenity"="police"](around:5000, ${latitude}, ${longitude});
+                );
+                out center;
+            `;
+            const overpassURL = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+
+            fetch(overpassURL)
+                .then(response => response.json())
+                .then(data => {
+                    const policeStationsDiv = document.getElementById("policeStations");
+                    policeStationsDiv.innerHTML = "";
+
+                    if (!data.elements.length) {
+                        policeStationsDiv.innerHTML = "<p>No nearby police stations found.</p>";
+                        return;
+                    }
+
+                    data.elements.forEach(station => {
+                        if (station.tags && station.tags.name) {
+                            const stationInfo = document.createElement("p");
+                            stationInfo.innerHTML = `🚔 ${station.tags.name}`;
+                            policeStationsDiv.appendChild(stationInfo);
+                        }
+                    });
+
+                    if (policeStationsDiv.innerHTML === "") {
+                        policeStationsDiv.innerHTML = "<p>No named police stations found, but there are police facilities in the area.</p>";
+                    }
+                })
+                .catch(error => {
+                    document.getElementById("policeStations").innerHTML = "<p>Error fetching police stations.</p>";
+                    console.error("Error fetching police station data:", error);
+                });
+        }
+
+
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        var lat = position.coords.latitude;
+                        var lon = position.coords.longitude;
+                        document.getElementById("latitude").innerText = lat.toFixed(6);
+                        document.getElementById("longitude").innerText = lon.toFixed(6);
+                        initMap(lat, lon);
+                        getNearbyPoliceStations(lat, lon);
+                    }
+                );
+            }
+        }
+
+        window.onload = function() {
+            document.getElementById("transcript").innerText = "Waiting for input...";
+            getLocation();
+        };
+
+        setInterval(updateCounts, 500);
+        setInterval(updateSpeechStatus, 2000);
+    </script>
+</body>
+</html>
